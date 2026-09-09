@@ -1,0 +1,23 @@
+# Only allow traffic from the frontend namespace to the backend namespace
+# Allow the backend namespace to send traffic to the frontend namespace, 
+# redis, postgres/external db, and the backend namespace itself
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: backend-network-policy
+  namespace: backend
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:      
+        matchLabels:
+          app: frontend
+      ports:
+      - protocol: TCP
+        port: 3000

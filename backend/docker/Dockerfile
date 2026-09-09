@@ -1,15 +1,15 @@
-# Build context is the `backend/` directory (see docker-compose.yml / k8s
-# build instructions), this Dockerfile just lives in backend/docker/.
+# Build context is the repo root (this Dockerfile lives in backend/docker/,
+# so build with: docker build -f backend/docker/Dockerfile -t <tag> .
 
 # --- build stage -----------------------------------------------------------
 FROM node:22-alpine AS build
 WORKDIR /app
 
-COPY package.json package-lock.json ./
+COPY backend/package.json backend/package-lock.json ./
 RUN npm ci
 
-COPY tsconfig.json ./
-COPY src ./src
+COPY backend/tsconfig.json ./
+COPY backend/src ./src
 RUN npm run build
 
 # --- runtime stage -----------------------------------------------------------
@@ -17,7 +17,7 @@ FROM node:22-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-COPY package.json package-lock.json ./
+COPY backend/package.json backend/package-lock.json ./
 RUN npm ci --omit=dev
 
 COPY --from=build /app/dist ./dist
