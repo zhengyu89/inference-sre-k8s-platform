@@ -9,7 +9,7 @@ export default defineConfig({
       // Mirrors the /api/ -> backend proxy used by nginx in the production
       // container, so the frontend can always call same-origin `/api/...`.
       "/api": {
-        target: "http://localhost:3000",
+        target: process.env.VITE_API_BASE_URL || "http://localhost:3000",
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
