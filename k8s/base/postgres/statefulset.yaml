@@ -51,15 +51,25 @@ spec:
         - name: postgres-data
           mountPath: /var/lib/postgresql/data
 
+        # Both probes go through `sh -c` so the shell expands POSTGRES_USER /
+        # POSTGRES_DB from the container's own environment (supplied by the
+        # postgres-credentials Secret above). Kubernetes' own $(VAR) syntax
+        # does NOT work here: the kubelet only expands it in a container's
+        # `command`/`args`, never in a probe's exec.command. Written as
+        # $(POSTGRES_USER) these were passed through verbatim, so pg_isready
+        # connected as a role literally named "$(POSTGRES_USER)" and Postgres
+        # logged `FATAL: role "$(POSTGRES_USER)" does not exist` on every
+        # probe — silently, because pg_isready reports exit 0 for any server
+        # that answers at all, rejected credentials included.
         readinessProbe:
           exec:
-            command: ["pg_isready", "-U", "$(POSTGRES_USER)", "-d", "$(POSTGRES_DB)"]
+            command: ["sh", "-c", 'exec pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
           periodSeconds: 5
           timeoutSeconds: 3
 
         livenessProbe:
           exec:
-            command: ["pg_isready", "-U", "$(POSTGRES_USER)", "-d", "$(POSTGRES_DB)"]
+            command: ["sh", "-c", 'exec pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"']
           initialDelaySeconds: 15
           periodSeconds: 10
           timeoutSeconds: 3
