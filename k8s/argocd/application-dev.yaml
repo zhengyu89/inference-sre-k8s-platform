@@ -1,0 +1,39 @@
+# Argo CD Application for the dev overlay. Apply this into the argocd
+# namespace (where Argo CD itself runs) — it is not part of any
+# `kubectl apply -k k8s/overlays/dev` flow and is not referenced by any
+# overlay's kustomization.yaml:
+#
+#   kubectl apply -f k8s/argocd/application-dev.yaml
+#
+# Argo CD then does the rest: watches this repo/branch/path and reconciles
+# the dev overlay's Kustomize output into the inference-sre-platform
+# namespace (auto-created since CreateNamespace=true is set below).
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: inference-sre-platform-dev
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/zhengyu89/inference-sre-k8s-platform.git
+    targetRevision: HEAD
+    path: k8s/overlays/dev
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: inference-sre-platform
+
+  syncPolicy:
+    automated:
+      prune: true    # remove resources deleted from git
+      selfHeal: true  # revert manual/out-of-band cluster drift
+    syncOptions:
+      - CreateNamespace=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m

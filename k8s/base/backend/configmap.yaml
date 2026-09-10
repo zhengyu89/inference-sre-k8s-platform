@@ -1,7 +1,13 @@
+# PreSync hook at sync-wave -3, same reasoning as backend-db-secret.yaml —
+# the backend-migrate Job (wave -1) envFrom's this ConfigMap too, and as a
+# plain resource it wouldn't exist until the (later) normal Sync phase.
 apiVersion: v1
 kind: ConfigMap
 metadata:
   name: backend-config
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/sync-wave: "-3"
 data:
   PORT: "3000"
   # The redis/ and inference-worker/ Services resolve the same way in every

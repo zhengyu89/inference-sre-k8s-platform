@@ -1,9 +1,19 @@
+# PreSync hook at sync-wave -3, same as postgres-credentials (see
+# secret.yaml) — the backend-migrate Job (wave -1) resolves this Service's
+# `postgres` DNS name from its wait-for-postgres init container, and the
+# postgres StatefulSet (wave -2) needs it to exist for pod DNS regardless.
+# As a plain resource it wouldn't be created until the normal Sync phase,
+# which starts only after every PreSync hook succeeds — leaving migrate's
+# init container with no `postgres` name to resolve at all.
 apiVersion: v1
 kind: Service
 metadata:
   name: postgres
   labels:
     app: postgres
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/sync-wave: "-3"
 spec:
   # Headless — gives the StatefulSet pod a stable DNS identity
   # (postgres-0.postgres) as well as the plain `postgres` name the backend
