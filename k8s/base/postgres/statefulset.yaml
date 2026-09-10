@@ -15,17 +15,6 @@ spec:
       labels:
         app: postgres
     spec:
-      # Ordering-only: Postgres has no functional dependency on Redis, this
-      # just makes the cluster's bring-up order predictable
-      # (Redis -> Postgres -> Worker -> backend -> frontend) on a fresh
-      # `kubectl apply -k`.
-      initContainers:
-      - name: wait-for-redis
-        image: busybox:1.36
-        command:
-        - sh
-        - -c
-        - until nc -z -w2 redis 6379; do echo waiting for redis; sleep 2; done
       containers:
       - name: postgres
         image: postgres:16-alpine
@@ -72,6 +61,13 @@ spec:
   - metadata:
       name: postgres-data
     spec:
+      # Named explicitly rather than left to whatever the cluster's default
+      # happens to be. Docker Desktop's Kubernetes (which runs on kind under
+      # the hood — see its rancher.io/local-path StorageClasses and
+      # desktop-control-plane/desktop-worker* node names) already ships this
+      # as its default class; pointed at a different cluster, swap this for
+      # whatever that cluster's default/preferred class is named.
+      storageClassName: standard
       accessModes: ["ReadWriteOnce"]
       resources:
         requests:

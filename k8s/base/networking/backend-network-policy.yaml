@@ -1,11 +1,19 @@
-# Only allow traffic from the frontend namespace to the backend namespace
-# Allow the backend namespace to send traffic to the frontend namespace, 
-# redis, postgres/external db, and the backend namespace itself
+# Restricts inbound traffic to backend pods: only pods labeled app: frontend
+# may reach it, and only on the port the API is actually served on.
+#
+# Everything in this repo deploys unnamespaced (no Namespace objects/labels
+# exist), so this matches on pod labels rather than namespaceSelector — the
+# original version selected namespaces labeled app: frontend, which were
+# never created, so it matched nothing even before it was wired into any
+# kustomization.yaml (it wasn't, so it was never applied at all either).
+#
+# Requires a CNI that enforces NetworkPolicy to actually do anything —
+# minikube's default CNI does not; start it with `--cni=calico` (or
+# similar) for this to be enforced rather than silently permissive.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: backend-network-policy
-  namespace: backend
 spec:
   podSelector:
     matchLabels:
@@ -14,9 +22,9 @@ spec:
   - Ingress
   ingress:
   - from:
-    - namespaceSelector:      
+    - podSelector:
         matchLabels:
           app: frontend
-      ports:
-      - protocol: TCP
-        port: 3000
+    ports:
+    - protocol: TCP
+      port: 3000

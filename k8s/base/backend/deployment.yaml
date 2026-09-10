@@ -15,32 +15,14 @@ spec:
       labels:
         app: backend
     spec:
-      # Backend genuinely needs all three reachable (DATABASE_URL, REDIS_URL,
-      # WORKER_URL — see backend/src/config/index.ts) — this isn't just
-      # ordering, it fails to become ready without them anyway. Checking
-      # them here means a backend restart doesn't get stuck depending on
-      # every other pod's init containers having already run once.
-      initContainers:
-      - name: wait-for-redis
-        image: busybox:1.36
-        command:
-        - sh
-        - -c
-        - until nc -z -w2 redis 6379; do echo waiting for redis; sleep 2; done
-      - name: wait-for-postgres
-        image: busybox:1.36
-        command:
-        - sh
-        - -c
-        - until nc -z -w2 postgres 5432; do echo waiting for postgres; sleep 2; done
-      - name: wait-for-worker
-        image: busybox:1.36
-        command:
-        - sh
-        - -c
-        - until wget -q -O- http://inference-worker:8000/health/ready; do echo waiting for inference-worker; sleep 2; done
       containers:
-      - image: ivantan67/inference-sre-api:v1.0.0
+      # imagePullPolicy: Always because this tag is mutable and gets
+      # overwritten in place rather than incrementing per build — without
+      # this, a node that already pulled a stale v2 keeps reusing it
+      # (kubelet's default IfNotPresent) even after a newer image is pushed
+      # under the same tag, exactly as happened live during development here.
+      - image: ivantan67/inference-sre-api:v2
+        imagePullPolicy: Always
         name: inference-sre-api
         ports:
         - containerPort: 3000
@@ -63,9 +45,15 @@ spec:
             cpu: 500m
             memory: 512Mi
 
+        # Readiness reflects real dependency state (see backend/src/index.ts
+        # /health/ready — checks Postgres+Redis, not the worker: workerClient
+        # already degrades per-request to a 502 rather than needing the whole
+        # backend pulled from service over it). Liveness/startup stay on
+        # /health (process-alive only) so a transient DB/cache outage gets
+        # this pod marked NotReady, not killed.
         readinessProbe:
           httpGet:
-            path: /health
+            path: /health/ready
             port: 3000
           periodSeconds: 5
           timeoutSeconds: 1

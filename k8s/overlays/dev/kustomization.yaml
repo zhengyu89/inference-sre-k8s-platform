@@ -6,3 +6,4 @@ resources:
   # and backend-db-secret it defines — the backend picks up DATABASE_URL
   # from the latter with no further wiring needed here.
   - ../../base/postgres
+

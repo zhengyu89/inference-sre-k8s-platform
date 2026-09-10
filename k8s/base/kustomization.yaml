@@ -6,3 +6,4 @@ resources:
   - inference-worker/
   - frontend/
   - api-gateway/
+  - networking/

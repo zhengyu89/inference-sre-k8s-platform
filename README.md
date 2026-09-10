@@ -791,6 +791,21 @@ kubectl kustomize k8s/overlays/staging
 kubectl kustomize k8s/overlays/prod
 ```
 
+### Accessing services locally after applying the dev overlay
+
+Services in the dev overlay are ClusterIP-only — reachable inside the cluster, not
+directly from your host. Port-forward the one you want to hit:
+
+```bash
+kubectl port-forward svc/api-gateway 8000:8000
+```
+
+Then open [http://localhost:8000](http://localhost:8000). This is the site's
+single entrypoint: it routes to the frontend, whose nginx proxies `/api/` to the
+backend, which in turn talks to the inference worker — so this one port-forward
+is enough to exercise the whole stack. Leave the command running in its own
+terminal for as long as you're testing.
+
 ## Repository Structure
 
 ```text

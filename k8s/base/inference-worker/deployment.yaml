@@ -15,20 +15,11 @@ spec:
       labels:
         app: inference-worker
     spec:
-      # Ordering-only: the worker has no functional dependency on Postgres
-      # (see inference-worker/app/config.py — no DB/Redis client at all),
-      # this just makes the cluster's bring-up order predictable
-      # (Redis -> Postgres -> Worker -> backend -> frontend) on a fresh
-      # `kubectl apply -k`.
-      initContainers:
-      - name: wait-for-postgres
-        image: busybox:1.36
-        command:
-        - sh
-        - -c
-        - until nc -z -w2 postgres 5432; do echo waiting for postgres; sleep 2; done
       containers:
+      # imagePullPolicy: Always — see backend/deployment.yaml for why (mutable
+      # tag, bit us live during development of this manifest).
       - image: ivantan67/inference-sre-worker:v1
+        imagePullPolicy: Always
         name: inference-worker
         ports:
         - name: http

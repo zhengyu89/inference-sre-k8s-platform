@@ -10,7 +10,11 @@ RUN npm ci
 
 COPY backend/tsconfig.json ./
 COPY backend/src ./src
-RUN npm run build && cp -r src/db/migrations dist/db/migrations
+# `npm run build` itself copies db/migrations/*.sql into dist/ (see
+# package.json — tsc alone only emits compiled .js, not the raw SQL
+# migrate.js reads at runtime), so this stays a plain build with no
+# Docker-specific special-casing.
+RUN npm run build
 
 # --- runtime stage -----------------------------------------------------------
 FROM node:22-alpine AS runtime
