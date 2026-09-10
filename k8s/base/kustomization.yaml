@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - backend/
+  - redis/
+  # frontend/ and networking/ aren't wired up yet — their kustomization.yaml
+  # files are still empty placeholders elsewhere in this repo. Add them here
+  # once populated, rather than referencing an invalid kustomization.
+  #
+  # postgres/ is deliberately NOT listed here: only dev and stag want an
+  # in-cluster Postgres, so they each add ../../base/postgres themselves;
+  # prod supplies its own backend-db-secret pointing at an external Postgres
+  # instead. See k8s/overlays/{dev,stag,prod}/kustomization.yaml.

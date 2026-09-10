@@ -20,7 +20,17 @@ spec:
         name: inference-sre-api
         ports:
         - containerPort: 3000
-        resources: {}
+
+        # PORT/REDIS_URL come from the backend-config ConfigMap (same in
+        # every overlay); DATABASE_URL comes from a backend-db-secret that
+        # each overlay supplies itself — dev/stag get it for free from
+        # ../../base/postgres (in-cluster), prod brings its own pointing at
+        # an external managed Postgres.
+        envFrom:
+        - configMapRef:
+            name: backend-config
+        - secretRef:
+            name: backend-db-secret
 
         readinessProbe:
           httpGet:
@@ -28,7 +38,7 @@ spec:
             port: 3000
           periodSeconds: 5
           timeoutSeconds: 1
-        
+
         livenessProbe:
           httpGet:
             path: /health
