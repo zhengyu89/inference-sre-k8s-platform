@@ -1,9 +1,24 @@
+# Wired as an Argo CD PreSync hook at sync-wave -2, one step ahead of the
+# backend-migrate Job (wave -1, see migrate-job.yaml): migrate's init
+# container waits on this Service being reachable, but Postgres is an
+# ordinary (non-hook) resource everywhere else in this Application, so it
+# would only be created in the normal Sync phase — which runs strictly after
+# all PreSync hooks finish. Left as a plain resource, that's migrate waiting
+# forever on a Postgres that Argo CD hasn't been allowed to create yet.
+# Making Postgres a PreSync hook too (ordered before migrate via sync-wave)
+# gets it created and waited-on for health (ready replicas == desired) before
+# migrate's hook even starts. No hook-delete-policy here on purpose — unlike
+# the Job, this needs to persist as a real running resource, not be cleaned
+# up once the hook phase completes.
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
   name: postgres
   labels:
     app: postgres
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/sync-wave: "-2"
 spec:
   serviceName: postgres
   replicas: 1

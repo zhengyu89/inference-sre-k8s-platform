@@ -9,6 +9,14 @@
 # removes the completed Job before the next sync so a new one (with a fresh
 # name via Argo CD's sync-wave hashing) can run cleanly next time.
 #
+# sync-wave -1, one step after postgres's StatefulSet (wave -2, see
+# postgres/statefulset.yaml) — both are PreSync hooks, and hooks in the same
+# phase run in sync-wave order. Without that ordering, Postgres (an ordinary
+# resource everywhere else) wouldn't be created until the normal Sync phase,
+# which only starts once this PreSync hook succeeds — the wait-for-postgres
+# init container below would then block forever on a Service that Argo CD
+# hasn't created yet.
+#
 # Not part of a plain `kubectl apply -k` flow — outside Argo CD, run
 # migrations manually first, e.g.:
 #   kubectl apply -k k8s/overlays/dev
@@ -22,6 +30,7 @@ metadata:
   annotations:
     argocd.argoproj.io/hook: PreSync
     argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+    argocd.argoproj.io/sync-wave: "-1"
 spec:
   backoffLimit: 2
   template:
