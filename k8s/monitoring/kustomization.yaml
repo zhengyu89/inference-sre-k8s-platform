@@ -1,0 +1,181 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# The platform's observability stack, deployed as its own unit — separate from
+# the application overlays in ../overlays/. It is NOT pulled in by base/ or by
+# any overlay; it gets its own Argo CD Application (../argocd/application-monitoring.yaml)
+# so the ~15MB of Prometheus Operator CRDs and the monitoring lifecycle stay
+# decoupled from the app's sync.
+#
+# kube-prometheus-stack is one chart that bundles the whole chain this platform
+# needs, already wired together:
+#
+#   node-exporter (DaemonSet, per-node CPU/mem/disk/net)  ─┐
+#   kube-state-metrics (Deployment/Pod/HPA object state)  ─┼─► Prometheus ─► Grafana
+#   kubelet + cAdvisor (container CPU/memory)             ─┤    (datasource + dashboards
+#   inference-worker /metrics (../components/monitoring)  ─┘     provisioned by the chart)
+#
+# Rendered through kustomize's Helm chart inflator, the same pattern already used
+# by ../overlays/prod/sealed-secrets. That generator requires --enable-helm:
+#
+#   kubectl kustomize --enable-helm k8s/monitoring | kubectl apply --server-side -f -
+#
+# --server-side is not optional: several of these CRDs exceed the 262144-byte
+# limit on the kubectl.kubernetes.io/last-applied-configuration annotation that
+# client-side apply writes. The Argo CD Application sets ServerSideApply=true for
+# the same reason.
+#
+# Argo CD also needs to be told to allow the inflator, once per cluster:
+#   kubectl -n argocd patch cm argocd-cm --type merge \
+#     -p '{"data":{"kustomize.buildOptions":"--enable-helm"}}'
+#   kubectl -n argocd rollout restart deploy/argocd-repo-server
+# Without it every sync of this Application fails with
+# "must specify --enable-helm".
+
+resources:
+  - namespace.yaml
+
+helmCharts:
+  - name: kube-prometheus-stack
+    repo: https://prometheus-community.github.io/helm-charts
+    version: 90.0.0
+    releaseName: monitoring
+    namespace: monitoring
+    # Default is false. Without this the Prometheus/ServiceMonitor/etc. CRDs are
+    # never rendered, the operator has nothing to reconcile, and nothing starts.
+    includeCRDs: true
+
+    valuesInline:
+      # ---------------------------------------------------------------------
+      # Scrape targets that do not exist or are unreachable on a local cluster.
+      #
+      # On Docker Desktop / minikube / kind the control-plane components bind to
+      # 127.0.0.1 inside the node VM, so their ServiceMonitors resolve to targets
+      # Prometheus can never reach — they sit permanently "down" and make the
+      # Targets page look broken. Managed clusters (EKS/GKE/AKS) hide them
+      # entirely. Flip these back to true on a cluster where you control and can
+      # reach the control plane.
+      # ---------------------------------------------------------------------
+      kubeControllerManager:
+        enabled: false
+      kubeScheduler:
+        enabled: false
+      kubeProxy:
+        enabled: false
+      kubeEtcd:
+        enabled: false
+
+      # Alerting is out of scope for this platform right now — Grafana is the
+      # consumption surface. Dropping Alertmanager saves a StatefulSet and ~200Mi
+      # on a laptop cluster. Set enabled: true to get it back; the chart's default
+      # alert rules are still installed and evaluated either way, they just have
+      # nowhere to route.
+      alertmanager:
+        enabled: false
+
+      prometheusOperator:
+        # These two must be turned off together.
+        #
+        # The admission webhook is delivered as Helm *hooks* (pre-install/post-install
+        # Jobs that generate and patch a TLS cert). `helm template` — which is what
+        # the kustomize inflator runs — emits hook resources as ordinary manifests,
+        # stripped of the ordering guarantees Helm would normally give them. The
+        # result under GitOps is two Jobs that race the operator, plus a
+        # ValidatingWebhookConfiguration whose caBundle is patched in-cluster and
+        # therefore drifts OutOfSync forever against Git.
+        #
+        # The cost of disabling: PrometheusRule YAML is no longer validated at
+        # admission time. A malformed rule is rejected by the operator at reconcile
+        # instead of by the API server at apply.
+        admissionWebhooks:
+          enabled: false
+        tls:
+          enabled: false
+
+      # -----------------------------------------------------------------------
+      # node-exporter: the "provide node metrics to Grafana" half of the request.
+      # A DaemonSet on every node exposing host-level CPU, load, memory, disk and
+      # network from /proc and /sys. The chart also creates its ServiceMonitor, so
+      # Prometheus discovers it with no extra wiring, and provisions the matching
+      # "Node Exporter / Nodes" + "USE Method" Grafana dashboards below.
+      # -----------------------------------------------------------------------
+      nodeExporter:
+        enabled: true
+
+      # Turns Deployments/StatefulSets/Pods/HPAs into metrics — this is what makes
+      # "backend replica count" and HPA scaling visible in Grafana during the
+      # traffic-spike demo. Without it Prometheus sees resource usage but not
+      # Kubernetes object state.
+      kubeStateMetrics:
+        enabled: true
+
+      prometheus:
+        prometheusSpec:
+          retention: 24h
+
+          # The chart defaults these to true, which restricts Prometheus to only
+          # ServiceMonitors carrying `release: monitoring`. Our app-side
+          # ServiceMonitor (../components/monitoring) is authored by hand and has
+          # no Helm release label, so it would be silently ignored. false means
+          # "select every ServiceMonitor/PodMonitor/Rule in the cluster", which is
+          # what we want for a single-tenant platform like this.
+          serviceMonitorSelectorNilUsesHelmValues: false
+          podMonitorSelectorNilUsesHelmValues: false
+          ruleSelectorNilUsesHelmValues: false
+          probeSelectorNilUsesHelmValues: false
+          scrapeConfigSelectorNilUsesHelmValues: false
+
+          resources:
+            requests:
+              cpu: 100m
+              memory: 512Mi
+            limits:
+              memory: 1Gi
+
+          # A real PVC rather than the chart's default emptyDir, so metrics survive
+          # a pod restart. The PVC is created by the Prometheus Operator from this
+          # template, not by Argo CD, so Argo's prune never touches it.
+          storageSpec:
+            volumeClaimTemplate:
+              spec:
+                storageClassName: standard
+                accessModes:
+                  - ReadWriteOnce
+                resources:
+                  requests:
+                    storage: 5Gi
+
+      grafana:
+        enabled: true
+
+        # Dev-only credential for a local portfolio cluster, deliberately matching
+        # the Argo CD password in docs/k8s-progress.md. Anything internet-reachable
+        # must instead take this from a Secret — see
+        # ../overlays/prod/backend-db-secret.example.yaml for the SealedSecret
+        # workflow this repo already uses for real credentials.
+        adminUser: admin
+        adminPassword: admin123
+
+        # Provisions the stock Kubernetes + node-exporter dashboards, and points
+        # them at the in-cluster Prometheus as the default datasource. This is the
+        # "Prometheus provides node-exporter to Grafana" link — no manual datasource
+        # or dashboard import needed after install.
+        defaultDashboardsEnabled: true
+        defaultDashboardsTimezone: browser
+
+        service:
+          type: ClusterIP
+
+        # Dashboards are provisioned from ConfigMaps on every start, so there is
+        # nothing in Grafana's SQLite worth persisting. To add your own dashboard
+        # later, commit a ConfigMap labelled `grafana_dashboard: "1"` — the chart's
+        # sidecar picks it up automatically.
+        persistence:
+          enabled: false
+
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            memory: 256Mi

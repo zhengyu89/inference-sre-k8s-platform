@@ -1,0 +1,67 @@
+# Argo CD Application for the observability stack (Prometheus + Grafana +
+# node-exporter + kube-state-metrics, via kube-prometheus-stack).
+#
+# Deliberately a *second* Application, separate from application-dev.yaml:
+#   - the Prometheus Operator CRDs are ~15MB and would otherwise be re-diffed on
+#     every application sync;
+#   - monitoring outlives any single app environment — dev, stag and prod all
+#     scrape into this one stack;
+#   - it must be synced *first*, since it owns the ServiceMonitor CRD that the
+#     overlays' monitoring component depends on.
+#
+# Apply it into the argocd namespace; it is not part of any overlay:
+#
+#   kubectl apply -f k8s/argocd/application-monitoring.yaml
+#
+# One-time cluster prerequisite — Argo CD refuses kustomize's Helm chart inflator
+# unless it is explicitly enabled:
+#
+#   kubectl -n argocd patch cm argocd-cm --type merge \
+#     -p '{"data":{"kustomize.buildOptions":"--enable-helm"}}'
+#   kubectl -n argocd rollout restart deploy/argocd-repo-server
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: monitoring
+  namespace: argocd
+spec:
+  project: default
+
+  source:
+    repoURL: https://github.com/zhengyu89/inference-sre-k8s-platform.git
+    targetRevision: HEAD
+    path: k8s/monitoring
+
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: monitoring
+
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # Required, not cosmetic: client-side apply stores the full manifest in the
+      # kubectl.kubernetes.io/last-applied-configuration annotation, and several of
+      # kube-prometheus-stack's CRDs blow past the 262144-byte annotation limit.
+      # Server-side apply has no such annotation and no such ceiling.
+      - ServerSideApply=true
+      # The chart's own ServiceMonitors reference CRDs installed by this same sync,
+      # so the first pass has nothing to dry-run them against.
+      - SkipDryRunOnMissingResource=true
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+
+  ignoreDifferences:
+    # The operator writes status/defaulted fields back into its own CRDs; without
+    # this the Application never settles on Synced.
+    - group: apiextensions.k8s.io
+      kind: CustomResourceDefinition
+      jsonPointers:
+        - /status
+        - /spec/preserveUnknownFields

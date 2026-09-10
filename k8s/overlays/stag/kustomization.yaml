@@ -4,3 +4,8 @@ resources:
   - ../../base
   # Same in-cluster Postgres as dev — see k8s/base/postgres.
   - ../../base/postgres
+
+# Scrape config for the inference worker's /metrics. Requires the monitoring
+# Application (../../monitoring) to be synced first — it owns the ServiceMonitor CRD.
+components:
+  - ../../components/monitoring

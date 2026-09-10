@@ -1,0 +1,33 @@
+# Tells Prometheus to scrape the inference worker's own application metrics —
+# the nine metrics defined in inference-worker/app/metrics.py (request counts by
+# outcome, end-to-end/compute/queue latency histograms, queue depth, active
+# requests, rejections, model info). These are what turn the stock Kubernetes
+# dashboards into an actual *inference* dashboard: throughput, error rate and
+# P50/P95/P99 are computed in Grafana from these histograms.
+#
+# The selector matches k8s/base/inference-worker/service.yaml, and `port: http`
+# is that Service's *port name*, not a number — which is why this keeps working
+# if the port is ever renumbered.
+#
+# No namespaceSelector: this ServiceMonitor is deployed by the app overlay into
+# the same namespace as the Service it targets, which is the default scope.
+#
+# The backend (Node/Express) is deliberately absent — it has no prom-client and
+# serves no /metrics endpoint yet, so there is nothing to scrape. Adding one also
+# means opening k8s/base/networking/backend-network-policy.yaml, which currently
+# admits only pods labelled app: frontend on port 3000.
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: inference-worker
+  labels:
+    app: inference-worker
+spec:
+  selector:
+    matchLabels:
+      app: inference-worker
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+      scrapeTimeout: 10s

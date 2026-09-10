@@ -4,6 +4,11 @@ resources:
   - ../../base
   - sealed-secrets/
 
+# Scrape config for the inference worker's /metrics. Requires the monitoring
+# Application (../../monitoring) to be synced first — it owns the ServiceMonitor CRD.
+components:
+  - ../../components/monitoring
+
 # Prod points at an external managed Postgres (e.g. Supabase) instead of
 # pulling in ../../base/postgres like dev/stag do, so it needs its own
 # backend-db-secret with that connection string. Real values never get

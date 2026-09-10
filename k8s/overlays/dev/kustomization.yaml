@@ -7,3 +7,8 @@ resources:
   # from the latter with no further wiring needed here.
   - ../../base/postgres
 
+# Scrape config for the inference worker's /metrics. Requires the monitoring
+# Application (../../monitoring) to be synced first — it owns the ServiceMonitor CRD.
+components:
+  - ../../components/monitoring
+

@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Opt-in monitoring wiring for the application namespace. A Component rather than
+# a base resource because it is a cross-cutting concern each overlay chooses to
+# include, via `components:` in its kustomization.yaml — dev, stag and prod all do.
+#
+# This holds only the app-side glue (which of our Services Prometheus scrapes).
+# The Prometheus/Grafana/node-exporter stack itself lives in ../../monitoring and
+# is deployed separately.
+#
+# Ordering: ServiceMonitor is a CRD from the Prometheus Operator, so the
+# monitoring Application must be synced before any overlay that includes this
+# component, or the apply fails with "no matches for kind ServiceMonitor". The
+# app Application carries SkipDryRunOnMissingResource=true so Argo CD reports
+# this as a sync failure to retry rather than a hard manifest-validation error.
+resources:
+  - inference-worker-servicemonitor.yaml

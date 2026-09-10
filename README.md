@@ -647,39 +647,149 @@ Application deployment changes are managed declaratively through Git rather than
 
 ```text
 k8s/
-├── base/
+├── base/                        Shared application workloads
 │   ├── frontend/
 │   ├── backend/
+│   ├── inference-worker/
+│   ├── api-gateway/
 │   ├── redis/
-│   ├── postgres/
-│   ├── network-policy/
+│   ├── postgres/                Not in base/kustomization.yaml — pulled in by dev/stag only
+│   ├── networking/
 │   └── kustomization.yaml
 │
-└── overlays/
-    ├── dev/
-    │   └── kustomization.yaml
-    │
-    ├── staging/
-    │   └── kustomization.yaml
-    │
-    └── prod/
-        └── kustomization.yaml
+├── components/                  Opt-in cross-cutting concerns
+│   └── monitoring/              ServiceMonitor for the inference worker
+│
+├── monitoring/                  kube-prometheus-stack, its own deploy unit
+│   └── kustomization.yaml
+│
+├── overlays/
+│   ├── dev/                     base + in-cluster postgres
+│   ├── stag/                    base + in-cluster postgres
+│   └── prod/                    base + sealed-secrets, external Supabase
+│
+└── argocd/                      Argo CD Applications (applied into the argocd namespace,
+                                 never part of an overlay)
 ```
 
-Each overlay modifies the shared base according to the requirements of its environment.
+Each overlay modifies the shared base according to the requirements of its environment. All three
+include the `monitoring` component; `k8s/monitoring/` and `k8s/argocd/` sit outside the base/overlay
+structure because they are deployed as separate units with their own lifecycles.
 
 ## Helm
 
-Helm is used for reusable platform packages and supporting dependencies.
+Helm is used for third-party platform components, always *through* Kustomize rather than
+alongside it. Charts are inflated by Kustomize's built-in Helm chart generator (`helmCharts:`
+in a `kustomization.yaml`), so Git stays the single source of truth and Argo CD has one
+rendering path to reason about instead of two.
 
-Potential Helm-managed components include:
+Currently Helm-managed:
 
-* Prometheus
-* Grafana
-* Redis
-* Application chart packaging
+| Component | Chart | Where |
+| --- | --- | --- |
+| Prometheus, Grafana, node-exporter, kube-state-metrics | `kube-prometheus-stack` | [`k8s/monitoring/`](./k8s/monitoring/kustomization.yaml) |
+| Sealed Secrets controller | `sealed-secrets` | [`k8s/overlays/prod/sealed-secrets/`](./k8s/overlays/prod/sealed-secrets/kustomization.yaml) |
 
-Application-specific environment differences remain manageable through the project's Kustomize structure.
+Because the generator shells out to Helm, every build of those paths needs `--enable-helm`:
+
+```bash
+kubectl kustomize --enable-helm k8s/monitoring
+```
+
+Argo CD refuses it by default too, and needs telling once per cluster:
+
+```bash
+kubectl -n argocd patch cm argocd-cm --type merge \
+  -p '{"data":{"kustomize.buildOptions":"--enable-helm"}}'
+kubectl -n argocd rollout restart deploy/argocd-repo-server
+```
+
+Application-specific environment differences remain managed through Kustomize overlays, not
+through Helm values.
+
+## Monitoring
+
+Observability is deployed as its own unit in [`k8s/monitoring/`](./k8s/monitoring/), separate
+from the application overlays, with its own Argo CD Application. One chart
+(`kube-prometheus-stack`) supplies the whole chain already wired together:
+
+```text
+node-exporter        per-node CPU, load, memory, disk, network   ─┐
+kube-state-metrics   Deployment/Pod/HPA object state             ─┼─► Prometheus ─► Grafana
+kubelet / cAdvisor   per-container CPU and memory                ─┤
+inference-worker     /metrics on :8000                           ─┘
+```
+
+Grafana gets Prometheus as its default datasource and the stock Kubernetes and
+Node Exporter dashboards provisioned automatically — no manual import step.
+
+### Why a separate Argo CD Application
+
+* The Prometheus Operator CRDs are roughly 15MB; folding them into the app Application would
+  re-diff all of it on every application sync.
+* Monitoring outlives any one environment — dev, stag and prod all scrape into this one stack.
+* It must sync **first**, because it owns the `ServiceMonitor` CRD that the overlays depend on.
+
+### What gets scraped from the application
+
+[`k8s/components/monitoring/`](./k8s/components/monitoring/) is a Kustomize *component*, included
+by all three overlays, holding a `ServiceMonitor` for the inference worker. That picks up the
+nine metrics defined in [`inference-worker/app/metrics.py`](./inference-worker/app/metrics.py) —
+request counts by outcome, end-to-end / compute / queue latency histograms, queue depth, active
+requests, rejections, and model info. Throughput, error rate and P50/P95/P99 are derived from
+those histograms in Grafana rather than exported directly.
+
+The Node backend is **not** scraped: it has no `prom-client` and serves no `/metrics` endpoint
+yet. Adding one also means opening
+[`k8s/base/networking/backend-network-policy.yaml`](./k8s/base/networking/backend-network-policy.yaml),
+which currently admits only pods labelled `app: frontend` on port 3000.
+
+### Deploying it
+
+```bash
+# GitOps (preferred) — after the argocd-cm patch above
+kubectl apply -f k8s/argocd/application-monitoring.yaml
+
+# Or directly, to test before committing
+kubectl kustomize --enable-helm k8s/monitoring | kubectl apply --server-side -f -
+```
+
+`--server-side` is not optional. Client-side apply stores the full manifest in the
+`kubectl.kubernetes.io/last-applied-configuration` annotation, and several of these CRDs exceed
+the 262144-byte annotation limit. The Argo CD Application sets `ServerSideApply=true` for the
+same reason.
+
+### Reaching Grafana and Prometheus
+
+Both are `ClusterIP`, so port-forward the one you want:
+
+```bash
+kubectl port-forward -n monitoring svc/monitoring-grafana 3000:80
+kubectl port-forward -n monitoring svc/monitoring-kube-prometheus-prometheus 9090:9090
+```
+
+Grafana at [http://localhost:3000](http://localhost:3000), credentials `admin` / `admin123` —
+a dev-only credential set in `k8s/monitoring/kustomization.yaml`. Prometheus at
+[http://localhost:9090](http://localhost:9090); its **Status → Targets** page is the fastest way
+to confirm node-exporter and the inference worker are both being scraped.
+
+### Local-cluster adjustments
+
+The values in `k8s/monitoring/kustomization.yaml` are tuned for a laptop cluster and are
+commented inline where they diverge from a production install:
+
+* `kubeControllerManager`, `kubeScheduler`, `kubeProxy`, `kubeEtcd` are **disabled** — on Docker
+  Desktop, minikube and kind these bind to 127.0.0.1 inside the node VM and can never be
+  scraped, so they would sit permanently down. Re-enable on a cluster where you control the
+  control plane.
+* Alertmanager is **disabled** — alerting is out of scope; Grafana is the consumption surface.
+  The default alert rules are still installed and evaluated, they just have nowhere to route.
+* The operator's **admission webhooks are disabled**. They ship as Helm hooks, and `helm template`
+  — which is what the Kustomize inflator runs — emits hook resources as ordinary manifests
+  stripped of Helm's ordering guarantees. Left on, that produces two cert-generation Jobs racing
+  the operator plus a `caBundle` that drifts OutOfSync against Git forever. The cost is that
+  malformed `PrometheusRule` YAML is caught by the operator at reconcile rather than by the API
+  server at admission.
 
 ## ConfigMap And Secret Management
 
