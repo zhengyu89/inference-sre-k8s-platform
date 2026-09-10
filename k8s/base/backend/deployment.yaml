@@ -16,7 +16,7 @@ spec:
         app: backend
     spec:
       containers:
-      - image: ivantan67/inference-sre-api:v1
+      - image: ivantan67/inference-sre-api:v1.0.0
         name: inference-sre-api
         ports:
         - containerPort: 3000
@@ -31,6 +31,13 @@ spec:
             name: backend-config
         - secretRef:
             name: backend-db-secret
+        resources: 
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
 
         readinessProbe:
           httpGet:
@@ -47,11 +54,11 @@ spec:
           periodSeconds: 5
           failureThreshold: 3
 
-        resources:
-          requests:
-            cpu: 100m
-            memory: 128Mi
-          limits:
-            cpu: 500m
-            memory: 512Mi
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 3000
+          initialDelaySeconds: 10
+          periodSeconds: 5
+          failureThreshold: 3
 status: {}
