@@ -1,1 +1,9 @@
 docs/archive
+
+# Python
+inference-worker/.venv/
+inference-worker/__pycache__/
+inference-worker/app/__pycache__/
+**/__pycache__/
+*.pyc
+

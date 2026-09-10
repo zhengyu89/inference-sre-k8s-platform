@@ -12,7 +12,6 @@ spec:
       app: backend
   policyTypes:
   - Ingress
-  - Egress
   ingress:
   - from:
     - namespaceSelector:      

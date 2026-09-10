@@ -1,9 +1,14 @@
 import express, { type Request, type Response } from "express";
+import { config } from "./config/index.js";
 import { checkPostgres, pool } from "./db.js";
-import { checkRedis, redisClient } from "./redis.js";
+import { errorHandler, notFoundHandler } from "./middleware/errorHandler.js";
+import { checkRedis, redisClient, resetRequestCounters } from "./redis.js";
+import { apiRouter } from "./routes/index.js";
+import { startEventEvaluator } from "./services/eventService.js";
+import { abortActiveLoadTest, recoverStaleLoadTests } from "./services/loadTestRunner.js";
 
 const app = express();
-const port = process.env.PORT ?? 3000;
+const port = config.PORT;
 
 app.use(express.json());
 
@@ -26,21 +31,47 @@ app.get("/health/ready", async (_req: Request, res: Response) => {
   });
 });
 
+app.use("/api/v1", apiRouter);
+app.use(notFoundHandler);
+app.use(errorHandler);
+
 const server = app.listen(port, () => {
   console.log(`Backend listening on port ${port}`);
 });
 
 // Connect to Redis at startup, but don't block/crash the server if it isn't
 // reachable yet — /health/ready will report it as down until it connects.
-redisClient.connect().catch((err) => {
-  console.error("Initial Redis connection failed", err);
+// Once connected, reset the ephemeral counters this process owns: a prior
+// crash mid-request can otherwise leave inference:requests:active (or
+// inference:queue:depth) permanently elevated. See services plan §10.
+redisClient
+  .connect()
+  .then(() => resetRequestCounters())
+  .catch((err) => {
+    console.error("Initial Redis connection failed", err);
+  });
+
+// A load test left `running` by a crashed previous process should not
+// linger forever — mark it `aborted` on boot.
+recoverStaleLoadTests().catch((err) => {
+  console.error("Failed to recover stale load tests", err);
 });
+
+const stopEventEvaluator = startEventEvaluator();
 
 async function shutdown(signal: string) {
   console.log(`${signal} received, shutting down`);
   server.close(() => {
     console.log("HTTP server closed");
   });
+
+  stopEventEvaluator();
+
+  try {
+    await abortActiveLoadTest();
+  } catch (err) {
+    console.error("Error aborting active load test", err);
+  }
 
   try {
     if (redisClient.isOpen) {

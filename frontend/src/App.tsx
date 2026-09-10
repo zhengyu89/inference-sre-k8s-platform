@@ -1,92 +1,38 @@
-import { useCallback, useEffect, useState } from 'react'
-import './App.css'
+import { Outlet } from "react-router-dom";
+import { Navbar } from "./components/Navbar";
+import { isDefaultSimulation, useSimulation } from "./hooks/useSimulation";
 
-type ServiceState = 'ok' | 'error'
+function DegradedBanner() {
+  const simulation = useSimulation();
 
-interface ReadyResponse {
-  status: ServiceState
-  postgres: ServiceState
-  redis: ServiceState
-}
+  if (isDefaultSimulation(simulation.data)) {
+    return null;
+  }
 
-type CheckState =
-  | { phase: 'loading' }
-  | { phase: 'unreachable' }
-  | { phase: 'done'; data: ReadyResponse }
-
-const POLL_INTERVAL_MS = 5000
-
-function StatusDot({ state }: { state: ServiceState | 'unknown' }) {
-  return <span className={`dot dot-${state}`} aria-hidden="true" />
-}
-
-function labelFor(state: ServiceState | 'unknown') {
-  if (state === 'ok') return 'Connected'
-  if (state === 'error') return 'Unreachable'
-  return 'Unknown'
+  const config = simulation.data!;
+  return (
+    <div className="degraded-banner">
+      SRE Lab simulation is active — latency +{config.additionalLatencyMs}ms, error rate{" "}
+      {Math.round(config.errorRate * 100)}%, max concurrency {config.maxConcurrency}. This is not a
+      real incident.
+    </div>
+  );
 }
 
 function App() {
-  const [check, setCheck] = useState<CheckState>({ phase: 'loading' })
-  const [checkedAt, setCheckedAt] = useState<Date | null>(null)
-
-  const runCheck = useCallback(async () => {
-    try {
-      const res = await fetch('/api/health/ready')
-      const data = (await res.json()) as ReadyResponse
-      setCheck({ phase: 'done', data })
-    } catch {
-      setCheck({ phase: 'unreachable' })
-    }
-    setCheckedAt(new Date())
-  }, [])
-
-  useEffect(() => {
-    runCheck()
-    const id = setInterval(runCheck, POLL_INTERVAL_MS)
-    return () => clearInterval(id)
-  }, [runCheck])
-
-  const backendState: ServiceState | 'unknown' =
-    check.phase === 'done' ? 'ok' : check.phase === 'unreachable' ? 'error' : 'unknown'
-  const postgresState: ServiceState | 'unknown' =
-    check.phase === 'done' ? check.data.postgres : 'unknown'
-  const redisState: ServiceState | 'unknown' =
-    check.phase === 'done' ? check.data.redis : 'unknown'
-
   return (
-    <section id="status">
-      <h1>Inference SRE K8s Platform</h1>
-      <p className="subtitle">Frontend → Backend → Postgres / Redis connectivity check</p>
-
-      <ul className="status-list">
-        <li>
-          <StatusDot state={backendState} />
-          <span className="name">Backend</span>
-          <span className="label">{labelFor(backendState)}</span>
-        </li>
-        <li>
-          <StatusDot state={postgresState} />
-          <span className="name">Postgres</span>
-          <span className="label">{labelFor(postgresState)}</span>
-        </li>
-        <li>
-          <StatusDot state={redisState} />
-          <span className="name">Redis</span>
-          <span className="label">{labelFor(redisState)}</span>
-        </li>
-      </ul>
-
-      <div className="footer">
-        <button type="button" onClick={runCheck}>
-          Recheck now
-        </button>
-        <span className="checked-at">
-          {checkedAt ? `Last checked ${checkedAt.toLocaleTimeString()}` : 'Checking…'}
-        </span>
+    <div className="app-shell">
+      <Navbar />
+      <div className="workspace">
+      <header className="workspace-header"><span>Workspace <span className="header-slash">/</span> <strong>Inference operations</strong></span><span className="header-tag">Kubernetes platform</span></header>
+      <DegradedBanner />
+      <main className="app-main">
+        <Outlet />
+      </main>
+      <footer className="workspace-footer"><span>Inference SRE Platform</span><span>Observe · Experiment · Improve</span></footer>
       </div>
-    </section>
-  )
+    </div>
+  );
 }
 
-export default App
+export default App;

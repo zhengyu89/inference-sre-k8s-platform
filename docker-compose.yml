@@ -31,6 +31,23 @@ services:
       timeout: 5s
       retries: 5
 
+  inference-worker:
+    build:
+      context: ./inference-worker
+    container_name: inference-sre-worker
+    restart: unless-stopped
+    environment:
+      MODEL_NAME: classifier
+      MODEL_VERSION: v1
+      WORKER_ID: worker-01
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health/ready')"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
       context: .
@@ -41,12 +58,15 @@ services:
       PORT: 3000
       DATABASE_URL: postgres://postgres:postgres@postgres:5432/inference_sre
       REDIS_URL: redis://redis:6379
+      WORKER_URL: http://inference-worker:8000
     ports:
       - "3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      inference-worker:
         condition: service_healthy
 
   frontend:

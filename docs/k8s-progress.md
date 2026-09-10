@@ -18,4 +18,5 @@ add liveness and readiness probe. add resources
 
 9. k create svc clusterip backend --dry-run=client -o yaml > service.yaml
 
-10. Done backend ingress and kustomization
+10. Done backend ingress and kustomization, done configmap.
+
