@@ -123,6 +123,10 @@ export interface ServiceEvent {
   createdAt: string;
 }
 
+export interface EventListResponse {
+  items: ServiceEvent[];
+}
+
 export interface EventListParams {
   [key: string]: string | number | boolean | undefined;
   limit?: number;

@@ -1,5 +1,7 @@
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { Icon } from "../components/Icon";
 import { DataTable } from "../components/DataTable";
+import { PageIntro } from "../components/PageIntro";
 import { StatCard } from "../components/StatCard";
 import { useEvents } from "../hooks/useEvents";
 import { useRequests } from "../hooks/useRequests";
@@ -17,7 +19,13 @@ export default function Overview() {
 
   return (
     <div className="page">
-      <h1>Overview</h1>
+      <div className="overview-heading"><div><span className="eyebrow">PLATFORM INTELLIGENCE</span><h1>Service overview</h1></div><span className="refresh-label">Auto-refresh enabled</span></div>
+      <PageIntro>Your inference service at a glance. Monitor health, explore requests, and put reliability to the test.</PageIntro>
+      <section className="overview-hero">
+        <div className="hero-copy"><span className="hero-kicker"><Icon name="pulse" /> INFERENCE OPERATIONS</span><h2>Performance in focus.<br />Reliability by design.</h2><p>From the first prediction to peak traffic.<br />One workspace to understand every request.</p><Link className="hero-button" to="/inference">Try an inference <Icon name="arrow" /></Link><Link className="hero-secondary" to="/load-test">Run a load test ↗</Link></div>
+        <div className="hero-diagram" aria-label="Inference flow: request to model to response"><div className="diagram-orbit" /><div className="diagram-node node-input"><Icon name="requests" /><span>Request</span></div><div className="diagram-core"><Icon name="layers" /><strong>Inference</strong><span>MODEL ENGINE</span></div><div className="diagram-node node-output"><Icon name="inference" /><span>Response</span></div><span className="diagram-caption">REQUEST → PROCESS → PREDICT</span></div>
+      </section>
+      <div className="section-heading"><h2>Service metrics</h2><span>Latest snapshot{summaryStale ? " · stale" : ""}</span></div>
 
       {summary.isLoading && <p className="page-status">Loading summary…</p>}
       {summary.isError && summary.data === undefined && (
@@ -50,7 +58,7 @@ export default function Overview() {
               { key: "time", header: "Time", render: (row) => formatTime(row.createdAt) },
               { key: "message", header: "Message", render: (row) => row.message },
             ]}
-            rows={events.data}
+            rows={events.data.items}
             rowKey={(row) => String(row.id)}
             emptyMessage="No events yet."
           />
@@ -68,7 +76,7 @@ export default function Overview() {
             columns={[
               { key: "id", header: "Request", render: (row) => row.requestId },
               { key: "model", header: "Model", render: (row) => row.model },
-              { key: "status", header: "Status", render: (row) => row.status },
+              { key: "status", header: "Status", render: (row) => <span className={`request-status request-status-${row.status}`}>{row.status}</span> },
               { key: "latency", header: "Latency", render: (row) => formatLatency(row.latencyMs) },
             ]}
             rows={requests.data.items}

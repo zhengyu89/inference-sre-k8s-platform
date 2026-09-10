@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 import { apiClient, ApiRequestError } from "../api/client";
 import type { InferenceResult } from "../api/types";
 import { Field } from "../components/Field";
+import { PageIntro } from "../components/PageIntro";
 import { useSummary } from "../hooks/useSummary";
 import { formatLatency } from "../lib/format";
 
@@ -26,6 +27,11 @@ export default function Inference() {
   return (
     <div className="page">
       <h1>Inference Playground</h1>
+      <PageIntro>
+        Send a single request straight to the model and see exactly what comes back — prediction,
+        confidence, and latency — without generating any background traffic. Useful for quickly
+        trying an input or verifying the service is responding correctly.
+      </PageIntro>
 
       <form className="form" onSubmit={handleSubmit}>
         <Field label="Model" htmlFor="model">

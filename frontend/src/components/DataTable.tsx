@@ -21,7 +21,7 @@ export function DataTable<T>({ columns, rows, rowKey, onRowClick, emptyMessage }
   }
 
   return (
-    <table className="data-table">
+    <div className="table-scroll"><table className="data-table">
       <thead>
         <tr>
           {columns.map((col) => (
@@ -35,6 +35,8 @@ export function DataTable<T>({ columns, rows, rowKey, onRowClick, emptyMessage }
             key={rowKey(row)}
             className={onRowClick ? "data-table-row-clickable" : undefined}
             onClick={onRowClick ? () => onRowClick(row) : undefined}
+            tabIndex={onRowClick ? 0 : undefined}
+            onKeyDown={onRowClick ? (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onRowClick(row); } } : undefined}
           >
             {columns.map((col) => (
               <td key={col.key}>{col.render(row)}</td>
@@ -42,6 +44,6 @@ export function DataTable<T>({ columns, rows, rowKey, onRowClick, emptyMessage }
           </tr>
         ))}
       </tbody>
-    </table>
+    </table></div>
   );
 }

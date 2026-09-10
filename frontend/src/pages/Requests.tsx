@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { InferenceListItem, RequestStatus } from "../api/types";
 import { DataTable } from "../components/DataTable";
+import { PageIntro } from "../components/PageIntro";
 import { useRequests } from "../hooks/useRequests";
 import { formatLatency, formatTime } from "../lib/format";
 
@@ -33,6 +34,10 @@ export default function Requests() {
   return (
     <div className="page">
       <h1>Requests</h1>
+      <PageIntro>
+        Browse the full history of inference requests, filter by status or model, and click into
+        any row for a full breakdown of queue time, compute time, and (for failures) the error.
+      </PageIntro>
 
       <div className="filters">
         <label>
@@ -69,7 +74,7 @@ export default function Requests() {
               { key: "id", header: "Request", render: (row) => row.requestId },
               { key: "model", header: "Model", render: (row) => row.model },
               { key: "prediction", header: "Prediction", render: (row) => row.prediction ?? "—" },
-              { key: "status", header: "Status", render: (row) => row.status },
+              { key: "status", header: "Status", render: (row) => <span className={`request-status request-status-${row.status}`}>{row.status}</span> },
               { key: "latency", header: "Latency", render: (row) => formatLatency(row.latencyMs) },
               { key: "time", header: "Time", render: (row) => formatTime(row.createdAt) },
             ]}

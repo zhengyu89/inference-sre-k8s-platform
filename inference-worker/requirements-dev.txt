@@ -1,6 +1,0 @@
-# Only needed to (re)build models/classifier.onnx via models/build_model.py.
-# Not installed in the runtime image — the worker only needs onnxruntime to
-# run an already-exported model (see requirements.txt).
-scikit-learn==1.6.0
-skl2onnx==1.18.0
-onnx==1.17.0

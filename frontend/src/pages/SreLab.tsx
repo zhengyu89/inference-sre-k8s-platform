@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ApiRequestError } from "../api/client";
+import { PageIntro } from "../components/PageIntro";
 import { DEFAULT_SIMULATION_CONFIG, useSimulation } from "../hooks/useSimulation";
 
 const LATENCY_PRESETS = [0, 100, 300, 500];
@@ -35,6 +36,12 @@ export default function SreLab() {
   return (
     <div className="page">
       <h1>SRE Lab</h1>
+      <PageIntro>
+        Dial in artificial latency, failure rate, and concurrency limits to simulate a degraded
+        service on demand. Changes apply immediately and affect every request platform-wide — use
+        it to rehearse incidents, test alerting, or see autoscaling kick in. This is a controlled
+        simulation, not a real outage.
+      </PageIntro>
 
       {simulation.isLoading && <p className="page-status">Loading simulation config…</p>}
       {simulation.isError && simulation.data === undefined && (
@@ -49,6 +56,7 @@ export default function SreLab() {
               key={value}
               type="button"
               className={additionalLatencyMs === value ? "preset-active" : ""}
+              aria-pressed={additionalLatencyMs === value}
               onClick={() => setLatencyOverride(value)}
             >
               {value} ms
@@ -65,6 +73,7 @@ export default function SreLab() {
               key={value}
               type="button"
               className={errorRate === value ? "preset-active" : ""}
+              aria-pressed={errorRate === value}
               onClick={() => setErrorRateOverride(value)}
             >
               {Math.round(value * 100)}%
@@ -81,6 +90,7 @@ export default function SreLab() {
               key={value}
               type="button"
               className={maxConcurrency === value ? "preset-active" : ""}
+              aria-pressed={maxConcurrency === value}
               onClick={() => setConcurrencyOverride(value)}
             >
               {value}

@@ -23,10 +23,14 @@ function App() {
   return (
     <div className="app-shell">
       <Navbar />
+      <div className="workspace">
+      <header className="workspace-header"><span>Workspace <span className="header-slash">/</span> <strong>Inference operations</strong></span><span className="header-tag">Kubernetes platform</span></header>
       <DegradedBanner />
       <main className="app-main">
         <Outlet />
       </main>
+      <footer className="workspace-footer"><span>Inference SRE Platform</span><span>Observe · Experiment · Improve</span></footer>
+      </div>
     </div>
   );
 }

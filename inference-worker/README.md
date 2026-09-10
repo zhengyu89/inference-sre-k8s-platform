@@ -5,9 +5,12 @@ FastAPI + ONNX Runtime model-serving worker. See
 
 ## Run locally
 
+Dependencies are managed with [uv](https://docs.astral.sh/uv/) — `pyproject.toml` +
+`uv.lock`, no more `requirements*.txt`.
+
 ```bash
-python3 -m pip install --user -r requirements.txt
-PYTHONPATH=. python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8000
+uv sync                # creates .venv and installs runtime + dev deps from uv.lock
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 ```bash
@@ -30,8 +33,7 @@ curl -X PUT localhost:8000/simulation \
 step. To regenerate it:
 
 ```bash
-python3 -m pip install --user -r requirements-dev.txt
-python3 models/build_model.py
+uv run models/build_model.py    # uv sync already installs the dev group needed here
 ```
 
 The task is a trivial binary text classifier (`normal` vs `suspicious`) —

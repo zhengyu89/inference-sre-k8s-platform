@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiRequestError } from "../api/client";
 import { Field } from "../components/Field";
+import { PageIntro } from "../components/PageIntro";
 import { useLoadTest } from "../hooks/useLoadTest";
 import { formatLatency } from "../lib/format";
 
@@ -48,6 +49,11 @@ export default function LoadTest() {
   return (
     <div className="page">
       <h1>Load Testing</h1>
+      <PageIntro>
+        Generate synthetic traffic against the inference service to see how it holds up under
+        load — set a target rate, duration, and concurrency, then watch throughput, failures, and
+        latency update as the test runs.
+      </PageIntro>
 
       {!started && (
         <form className="form" onSubmit={handleSubmit}>
