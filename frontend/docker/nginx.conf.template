@@ -20,8 +20,13 @@ server {
 
     # Same-origin API access — the frontend always calls /api/..., so no
     # backend URL needs to be baked into the built JS per environment.
+    #
+    # No trailing slash on proxy_pass here: with one, nginx strips the
+    # matched "/api/" prefix before forwarding (so "/api/v1/x" would reach
+    # the backend as "/v1/x"), but the backend mounts its router at
+    # /api/v1 itself (backend/src/index.ts) and expects the full path.
     location /api/ {
-        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT}/;
+        proxy_pass http://${BACKEND_HOST}:${BACKEND_PORT};
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

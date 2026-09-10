@@ -1,0 +1,19 @@
+# Repo-root .dockerignore. Needed because backend/docker/Dockerfile builds
+# with the repo root as context (see the comment at the top of that file) —
+# without this, `docker build -f backend/docker/Dockerfile .` ships the
+# entire monorepo (both node_modules trees, the worker's .venv, git history)
+# to the daemon before the Dockerfile's explicit COPYs even run. The
+# Dockerfile only ever COPYs specific backend/ paths, so none of this was
+# ever making it into the image — this just makes the build faster.
+.git
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/*.pyc
+**/.env
+**/*.log
+frontend
+inference-worker
+k8s
+docs

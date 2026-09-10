@@ -1,0 +1,59 @@
+# Runs `backend/src/db/migrate.ts` (compiled to dist/db/migrate.js) against
+# whatever DATABASE_URL the overlay wires up, using the exact same image as
+# the backend Deployment — just with CMD overridden. Same envFrom as
+# deployment.yaml so it never drifts out of sync with how the app connects.
+#
+# Wired as an Argo CD PreSync hook: Argo CD creates this Job before syncing
+# the rest of the resources in this Application, waits for it to complete,
+# and only proceeds with backend/frontend/etc. if it succeeds. hook-delete-policy
+# removes the completed Job before the next sync so a new one (with a fresh
+# name via Argo CD's sync-wave hashing) can run cleanly next time.
+#
+# Not part of a plain `kubectl apply -k` flow — outside Argo CD, run
+# migrations manually first, e.g.:
+#   kubectl apply -k k8s/overlays/dev
+#   kubectl create job --from=job/backend-migrate backend-migrate-manual -n <ns>
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: backend-migrate
+  labels:
+    app: backend
+  annotations:
+    argocd.argoproj.io/hook: PreSync
+    argocd.argoproj.io/hook-delete-policy: BeforeHookCreation
+spec:
+  backoffLimit: 2
+  template:
+    metadata:
+      labels:
+        app: backend
+        job-name: backend-migrate
+    spec:
+      restartPolicy: Never
+      # Runs migrations directly against Postgres — as a PreSync hook this
+      # can fire before the in-cluster Postgres StatefulSet is ready, so wait
+      # for it explicitly rather than relying on backoffLimit retries.
+      initContainers:
+      - name: wait-for-postgres
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - until nc -z -w2 postgres 5432; do echo waiting for postgres; sleep 2; done
+      containers:
+      - image: ivantan67/inference-sre-api:v1.0.0
+        name: backend-migrate
+        command: ["npm", "run", "migrate"]
+        envFrom:
+        - configMapRef:
+            name: backend-config
+        - secretRef:
+            name: backend-db-secret
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi

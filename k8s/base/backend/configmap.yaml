@@ -4,6 +4,7 @@ metadata:
   name: backend-config
 data:
   PORT: "3000"
-  # The redis/ Service resolves the same way in every overlay, so it lives
-  # here rather than being redefined per environment.
+  # The redis/ and inference-worker/ Services resolve the same way in every
+  # overlay, so they live here rather than being redefined per environment.
   REDIS_URL: "redis://redis:6379"
+  WORKER_URL: "http://inference-worker:8000"

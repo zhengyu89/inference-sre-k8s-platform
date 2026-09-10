@@ -1,5 +1,10 @@
 docs/archive
 
+# Local chart cache downloaded by `kustomize --enable-helm` (helmCharts
+# generator, e.g. k8s/overlays/prod/sealed-secrets/) — a build artifact,
+# not source.
+**/charts/
+
 # Python
 inference-worker/.venv/
 inference-worker/__pycache__/

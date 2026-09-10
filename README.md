@@ -1,7 +1,7 @@
 # Inference SRE K8s Platform
 
 <p align="center">
-  <img src="./assets/images/inference-sre-platform.png" alt="Inference SRE K8s Platform cover" width="180" />
+  <img src="./assets/images/inference-sre-platform.png" alt="Inference SRE K8s Platform cover" width="560" />
 </p>
 
 <p align="center">
@@ -432,6 +432,49 @@ Expected response:
   "service": "inference-api"
 }
 ```
+
+### Or: run everything with `docker compose`
+
+`docker-compose.yml` at the repo root wires up all five services — `postgres`,
+`redis`, `inference-worker`, `backend`, `frontend` — as separate containers on
+one shared Docker network, so they reach each other by service name (e.g. the
+backend talks to `postgres:5432` and `redis:6379`, the frontend's nginx
+proxies `/api/` to `backend:3000`):
+
+```bash
+docker compose up -d
+```
+
+* Frontend: [http://localhost:8080](http://localhost:8080)
+* Backend: [http://localhost:3000](http://localhost:3000)
+* Inference worker: [http://localhost:8000](http://localhost:8000)
+
+A few things that trip people up:
+
+* **`inference-worker`, `backend`, and `frontend` build from local source**
+  (`build:` in `docker-compose.yml`), not from the images pushed to Docker
+  Hub — those Docker Hub images (`ivantan67/inference-sre-*`) are only what
+  the Kubernetes manifests under `k8s/` pull. Compose never touches Docker
+  Hub for them.
+* **Plain `docker compose up` does not rebuild on code changes.** Compose
+  only builds an image the first time; if one already exists locally it's
+  reused as-is, stale code and all. After changing backend/frontend/worker
+  source, rebuild explicitly:
+  ```bash
+  docker compose up -d --build
+  ```
+* **You don't need to manually delete containers between runs.** When an
+  image changes (via `--build`) or `docker-compose.yml` itself changes,
+  `docker compose up` detects it and recreates just the affected
+  container(s) — `postgres`/`redis` are left running untouched if they
+  didn't change. Manual cleanup is only needed for a full reset:
+  ```bash
+  docker compose down       # stop and remove all containers from this compose file
+  docker compose down -v    # same, plus wipe the postgres/redis volumes
+  ```
+* Rebuilding repeatedly leaves old, now-unreferenced image layers behind
+  (`<none>:<none>` in `docker images`). Clean those up occasionally with
+  `docker image prune`.
 
 ## Local Development
 

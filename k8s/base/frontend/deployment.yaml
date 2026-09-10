@@ -15,6 +15,15 @@ spec:
       labels:
         app: frontend
     spec:
+      # Frontend proxies /api/ to the backend (see frontend/docker/nginx.conf.template)
+      # and has nothing useful to serve until it's reachable.
+      initContainers:
+      - name: wait-for-backend
+        image: busybox:1.36
+        command:
+        - sh
+        - -c
+        - until wget -q -O- http://backend:3000/health/ready; do echo waiting for backend; sleep 2; done
       containers:
       - image: ivantan67/inference-sre-frontend:v1
         name: inference-sre-frontend

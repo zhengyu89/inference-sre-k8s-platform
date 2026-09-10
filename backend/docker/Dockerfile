@@ -10,7 +10,7 @@ RUN npm ci
 
 COPY backend/tsconfig.json ./
 COPY backend/src ./src
-RUN npm run build
+RUN npm run build && cp -r src/db/migrations dist/db/migrations
 
 # --- runtime stage -----------------------------------------------------------
 FROM node:22-alpine AS runtime

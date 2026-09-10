@@ -3,6 +3,6 @@ kind: Kustomization
 resources:
   - backend/
   - redis/
-  - backend/
+  - inference-worker/
   - frontend/
   - api-gateway/

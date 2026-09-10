@@ -2,6 +2,17 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 resources:
   - ../../base
-  # External managed Postgres — see backend-db-secret.yaml for why this
-  # lives here instead of pulling in ../../base/postgres like dev/stag do.
-  - backend-db-secret.yaml
+  - sealed-secrets/
+
+# Prod points at an external managed Postgres (e.g. Supabase) instead of
+# pulling in ../../base/postgres like dev/stag do, so it needs its own
+# backend-db-secret with that connection string. Real values never get
+# committed in plaintext — sealed-secrets/ installs the Sealed Secrets
+# controller, and the actual secret is committed as a SealedSecret, sealed
+# with `kubeseal` against that controller's public cert. See
+# backend-db-secret.example.yaml for the exact commands and the plaintext
+# shape it must match before sealing.
+#
+# Note: `helmCharts` (in sealed-secrets/kustomization.yaml) requires
+# building with --enable-helm, e.g.:
+#   kubectl kustomize --enable-helm k8s/overlays/prod | kubectl apply -f -
