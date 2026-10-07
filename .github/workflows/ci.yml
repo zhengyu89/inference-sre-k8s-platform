@@ -32,6 +32,7 @@ jobs:
           - overlays/stag
           - overlays/prod
           - monitoring
+          - storage
     steps:
       - uses: actions/checkout@v4
 
