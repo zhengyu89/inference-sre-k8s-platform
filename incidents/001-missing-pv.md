@@ -83,14 +83,53 @@ This is a kubeadm cluster. Unlike kind, it does not have a default storageClass 
 3. storage/storageclass.yaml is configured
 4. Create a application for storageClass. 
 
+```bash
+git fetch
+git pull origin main
+k apply -f k8s/argocd/application-storage.yaml 
+```
+
 ### Verification
 
 ```bash
-<commands used to verify the fix>
+k -n inference-sre-platform get po -w
+# postgres-0 is running
+# can see from argoCD UI as well. All the pod is green and the application is in healthy now.
+k get ns
+# NAME                     STATUS   AGE
+# local-path-storage       Active   9m27s
+k -n local-path-storage get all
+# NAME                                          READY   STATUS    RESTARTS   AGE
+# pod/local-path-provisioner-7c7ff4f446-8xvwx   1/1     Running   0          10m
+
+# NAME                                     READY   UP-TO-DATE   AVAILABLE   AGE
+# deployment.apps/local-path-provisioner   1/1     1            1           10m
+
+# NAME                                                DESIRED   CURRENT   READY   AGE
+# replicaset.apps/local-path-provisioner-7c7ff4f446   1         1         1       10m
+
+k -n local-path-storage get cm
+# NAME                DATA   AGE
+# kube-root-ca.crt    1      10m
+# local-path-config   4      10m
 ```
 
 **Result:**  
-✅ <Describe how you confirmed the system was working again.>
+```bash
+k -n inference-sre-platform get po postgres-0 -o yaml
+# postgres-0 is running
+k get pvc -n inference-sre-platform 
+# NAME                       STATUS   VOLUME                                     CAPACITY    
+# ACCESS MODES   STORAGECLASS   VOLUMEATTRIBUTESCLASS   AGE
+# postgres-data-postgres-0   Bound    pvc-bccee8d6-7141-4378-95d9-eb7444ba9174   1Gi        
+# RWO            standard       <unset>                 3h23
+k get pv -n inference-sre-platform
+# NAME                                       CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                                                                                                               STORAGECLASS   VOLUMEATTRIBUTESCLASS   REASON   AGE
+# pvc-38786c03-36e5-434d-8ea4-f19225041040   5Gi        RWO            Delete           Bound    monitoring/prometheus-monitoring-kube-prometheus-prometheus-db-prometheus-monitoring-kube-prometheus-prometheus-0   standard       <unset>                          6m49s
+# pvc-bccee8d6-7141-4378-95d9-eb7444ba9174   1Gi        RWO            Delete           Bound    inference-sre-platform/postgres-data-postgres-0   
+```
+
+Based on the observation. The PVC had successfully bounded with the PV assigned by rancher local path provisioner. 2 PV had created by storageClass [another one is for prometheus]. Postgres statefulset works properly.
 
 ---
 
@@ -98,21 +137,47 @@ This is a kubeadm cluster. Unlike kind, it does not have a default storageClass 
 
 ### Technical
 
-- <Kubernetes concept learned>
-- <Networking / security / scheduling behaviour learned>
-- <Useful command or debugging technique learned>
+- Learned how to setup and manage persistent storage for an on-prem Kubernetes cluster
+  using **Rancher Local Path Provisioner and StorageClass**. Althrough that for prototype lab purpose,
+  a manually created persistance volume with empty dir can do the job. But here we are demonstrating the best practise.
+- Understand how PVCs are dynamically bound to PVs.
+- Practised troubleshooting storage issues and inspecting local-path provisioner.
+
+<u>Knowledge on rancher/local-path-provisioner</u>
+
+- When we install the provision from kubectl/kustomize:
+```bash
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.37/deploy/local-path-storage.yaml
+kustomize build "github.com/rancher/local-path-provisioner/deploy?ref=v0.0.37" | kubectl apply -f -
+```
+A namespace called local-path-storage will be created along with:
+```
+Namespace
+ServiceAccount
+Role
+RoleBinding
+ClusterRole
+ClusterRoleBinding
+Deployment
+ConfigMap
+StorageClass
+```
 
 ### Troubleshooting
 
 > <What would you check first if this happened again?>
+I will directly check the PVC status by k get pvc -n <ns name>
 
 ### Prevention
 
 > <What could be changed so this problem is detected earlier or does not happen again?>
+Ensure that when the cluster is kubeadm, a storage application should be created for storageClass.
 
 ### Key Takeaway
 
 > **<One sentence summarizing the most important lesson from this incident.>**
+A PVC cannot dynamically create storage by itself. the cluster must first have a working StorageClass 
+and provisioner to create and bind a PersistentVolume.
 
 ## 6. Reference
 https://kubernetes.io/docs/concepts/storage/storage-classes/
