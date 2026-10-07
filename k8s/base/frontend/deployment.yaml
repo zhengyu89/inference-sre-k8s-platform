@@ -15,17 +15,8 @@ spec:
       labels:
         app: frontend
     spec:
-      # Kubernetes auto-injects Docker-links-style env vars for every Service
-      # that exists when this pod is created — including BACKEND_PORT, which
-      # collides with the identically-named var nginx.conf.template expects
-      # (see frontend/docker/Dockerfile) and clobbers it with
-      # "tcp://<cluster-ip>:3000" instead of a bare port number, crashing
-      # nginx on boot ("invalid port in upstream"). Disabling this avoids the
-      # whole class of bug rather than just this one collision.
       enableServiceLinks: false
       containers:
-      # imagePullPolicy: Always — see backend/deployment.yaml for why (mutable
-      # tag, bit us live during development of this manifest).
       - image: ivantan67/inference-sre-frontend:v2
         imagePullPolicy: Always
         name: inference-sre-frontend

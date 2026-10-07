@@ -1,0 +1,124 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  KUBECONFORM_VERSION: v0.6.7
+  # Keep in step with the cluster the manifests are deployed to.
+  KUBERNETES_VERSION: 1.31.0
+
+jobs:
+  # Renders every deployable Kustomize target the way Argo CD would, then
+  # schema-validates the output. Catches broken YAML, missing apiVersion/kind,
+  # unknown fields, and kustomize references that no longer resolve.
+  k8s-manifests:
+    name: k8s / ${{ matrix.target }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - overlays/dev
+          - overlays/stag
+          - overlays/prod
+          - monitoring
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar xz -C /usr/local/bin kubeconform
+
+      # --enable-helm is required: monitoring/ and overlays/prod/sealed-secrets/
+      # inflate Helm charts through kustomize's helmCharts generator.
+      - name: Render with kustomize
+        run: kubectl kustomize --enable-helm "k8s/${{ matrix.target }}" > rendered.yaml
+
+      # CRD kinds (ServiceMonitor, PrometheusRule, Argo CD, ...) are checked
+      # against the community CRDs catalog; kinds with no published schema
+      # are skipped rather than failed.
+      - name: Validate against Kubernetes schemas
+        run: |
+          kubeconform \
+            -strict \
+            -summary \
+            -ignore-missing-schemas \
+            -kubernetes-version "${KUBERNETES_VERSION}" \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            rendered.yaml
+
+      # Prod credentials must arrive as SealedSecrets. A plain Secret in the
+      # rendered prod output means plaintext values were committed to Git.
+      - name: Reject plaintext Secrets in prod
+        if: matrix.target == 'overlays/prod'
+        run: |
+          if grep -nE '^kind: Secret$' rendered.yaml; then
+            echo "::error::overlays/prod renders a plain Secret; commit a SealedSecret instead."
+            exit 1
+          fi
+
+  # The Argo CD Applications live outside every overlay, so nothing above
+  # renders them.
+  k8s-argocd:
+    name: k8s / argocd
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubeconform
+        run: |
+          curl -sSL "https://github.com/yannh/kubeconform/releases/download/${KUBECONFORM_VERSION}/kubeconform-linux-amd64.tar.gz" \
+            | tar xz -C /usr/local/bin kubeconform
+
+      - name: Validate Argo CD Applications
+        run: |
+          kubeconform \
+            -strict \
+            -summary \
+            -ignore-missing-schemas \
+            -schema-location default \
+            -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
+            k8s/argocd/
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run build

@@ -16,8 +16,6 @@ spec:
         app: inference-worker
     spec:
       containers:
-      # imagePullPolicy: Always — see backend/deployment.yaml for why (mutable
-      # tag, bit us live during development of this manifest).
       - image: ivantan67/inference-sre-worker:v1
         imagePullPolicy: Always
         name: inference-worker

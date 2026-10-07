@@ -57,3 +57,6 @@ assume a test runner exists; ask before adding one.
   `service_events` tables; Redis keys like `inference:queue:depth`) and Prometheus metric names
   (`inference_requests_total`, `inference_request_duration_seconds`, etc.) — useful as a naming
   reference when actually building these, but none of it is implemented.
+
+## Self-Maintenance Rule
+After every major change (new model, new page, new controller, route changes, migration changes, new test files, architectural shifts), update this CLAUDE.md file to reflect the current state.

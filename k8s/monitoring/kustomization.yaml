@@ -173,6 +173,30 @@ helmCharts:
         persistence:
           enabled: false
 
+        # Grafana 13.x boots far slower than the chart's probe defaults assume:
+        # it runs SQLite + unified-storage migrations, then registers ~15
+        # grafana-apiserver GroupVersions, all before it binds :3000. On this
+        # cluster that takes longer than the liveness budget of
+        # initialDelaySeconds 60 + failureThreshold 10 x periodSeconds 10 =
+        # 160s, so the kubelet killed it mid-boot on a `connection refused`
+        # liveness probe and it never once reached "HTTP Server Listen" —
+        # 8 restarts into CrashLoopBackOff without a single successful start.
+        #
+        # A startupProbe fixes that properly: liveness and readiness are both
+        # suspended until this one first succeeds, so slow boots get 300s of
+        # room while a *hung* process is still caught (30 failures then
+        # restart), and once running, liveness keeps its tight 160s reaction
+        # time. Prefer this over inflating livenessProbe.initialDelaySeconds,
+        # which would blunt crash detection for the whole life of the pod.
+        startupProbe:
+          httpGet:
+            path: /api/health
+            port: grafana
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+
         resources:
           requests:
             cpu: 50m

@@ -23,10 +23,6 @@ spec:
         - name: redis
           containerPort: 6379
 
-        # Redis holds only ephemeral state here (counters, caches, load-test
-        # progress) — everything is reconstructible or safe to lose, so no
-        # PVC/AOF/RDB persistence is configured. See
-        # docs/implementation-plan-services.md §10.
         readinessProbe:
           exec:
             command: ["redis-cli", "ping"]
